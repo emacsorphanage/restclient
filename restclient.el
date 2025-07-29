@@ -26,6 +26,13 @@
 (require 'outline)
 (require 'view)
 (require 'compat)
+
+(unless (fboundp 'hash-table-contains-p)
+  (defsubst hash-table-contains-p (key table)
+    "Return non-nil if TABLE has an element with KEY."
+    (let ((missing (make-symbol "missing")))
+      (not (eq (gethash key table missing) missing)))))
+
 (eval-when-compile (require 'subr-x))
 (eval-when-compile
   (if (version< emacs-version "26")
@@ -315,9 +322,9 @@ Workaround for Emacs bug#61916"
 
 (defmacro restclient--pop-global-var (var)
   "Restore old global value of VAR, if any."
-  `(when (and (hash-table-contains-p ',var restclient--globals-stack)
-              (< 0 (length (gethash ',var restclient--globals-stack))))
-     (setq ,var (pop (gethash ',var restclient--globals-stack)))))
+  `(when (and (hash-table-contains-p ,var restclient--globals-stack)
+              (< 0 (length (gethash ,var restclient--globals-stack))))
+     (setq ,var (pop (gethash ,var restclient--globals-stack)))))
 
 (defun restclient-http-do (method url headers entity &rest handle-args)
   "Send ENTITY and HEADERS to URL as a METHOD request."
