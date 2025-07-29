@@ -58,6 +58,22 @@
   :group 'restclient
   :type 'string)
 
+(defcustom restclient-response-buffer-mode-override nil
+  "If non-nil, use this alist to override major mode for 
+	specified content-types or magic matches in responses.
+For example: '((json . json-mode) (xml . nxml-mode)) like so -
+
+(setq restclient-response-buffer-mode-override '((json . json-mode) (xml . nxml-mode)))
+
+Keys:
+- 'json: When a JSON response is detected (Content-Type or magic match for {), use this mode.
+- 'xml: When an XML response is detected, use this mode.
+- 'default: fallback mode if nothing else matched.
+
+If a key is not provided, use the standard guessing logic for that type."
+  :group 'restclient
+  :type '(alist :key-type (choice (const json) (const xml) (const default)) :value-type symbol))
+
 (defcustom restclient-response-size-threshold 100000
   "Size of the response restclient can display without performance impact."
   :group 'restclient
@@ -387,12 +403,19 @@ METHOD, URL and STATUS are displayed along with the response headers."
                   (eq (forward-line) 0)))
       (unless guessed-mode
         (setq guessed-mode
-              (or (assoc-default nil
-                                 ;; magic mode matches
-                                 '(("<\\?xml " . xml-mode)
-                                   ("{\\s-*\"" . js-mode))
-                                 (lambda (re _dummy)
-                                   (looking-at re))) 'js-mode)))
+              (or
+               (assoc-default
+                nil
+                (list
+                 (cons "<\\?xml "
+                       (or (alist-get 'xml restclient-response-buffer-mode-override)
+                           'xml-mode))
+                 (cons "{\\s-*\""
+                       (or (alist-get 'json restclient-response-buffer-mode-override)
+                           'js-mode)))
+                (lambda (re _dummy) (looking-at re)))
+               (alist-get 'default restclient-response-buffer-mode-override)
+               'js-mode)))
       (let ((headers (buffer-substring-no-properties start end-of-headers)))
         (when guessed-mode
           (delete-region start (point))
@@ -403,7 +426,7 @@ METHOD, URL and STATUS are displayed along with the response headers."
                    (fundamental-mode)
                    (setq comment-start (let ((guessed-mode guessed-mode))
                                          (with-temp-buffer
-                                           (apply  guessed-mode '())
+                                           (apply guessed-mode '())
                                            comment-start)))
                    (message
                     "Response is too huge, using fundamental-mode to display it!"))
@@ -418,33 +441,27 @@ METHOD, URL and STATUS are displayed along with the response headers."
                 (font-lock-flush)
               (with-no-warnings
                 (font-lock-fontify-buffer))))
-
           (cond
-           ((eq guessed-mode 'xml-mode)
+           ((or (eq guessed-mode 'xml-mode) (eq guessed-mode 'nxml-mode))
             (goto-char (point-min))
-            (while (search-forward-regexp "\>[ \\t]*\<" nil t)
+            (while (search-forward-regexp ">[ \\t]*<" nil t)
               (backward-char) (insert "\n"))
             (indent-region (point-min) (point-max)))
-
            ((eq guessed-mode 'image-mode)
             (let* ((img (buffer-string)))
               (delete-region (point-min) (point-max))
               (fundamental-mode)
               (insert-image (create-image img nil t))))
-
-           ((eq guessed-mode 'js-mode)
+           ((or (eq guessed-mode 'js-mode)
+                (and (alist-get 'json restclient-response-buffer-mode-override)
+                     (eq guessed-mode (alist-get 'json restclient-response-buffer-mode-override))))
             (let ((json-special-chars (remq (assoc ?/ json-special-chars) json-special-chars))
-		  ;; Emacs 27 json.el uses `replace-buffer-contents' for
-		  ;; pretty-printing which is great because it keeps point and
-		  ;; markers intact but can be very slow with huge minimized
-		  ;; JSON.  We don't need that here.
-		  (json-pretty-print-max-secs 0))
+                  (json-pretty-print-max-secs 0))
               (ignore-errors (json-pretty-print-buffer)))
             (restclient-prettify-json-unicode)))
-
           (goto-char (point-max))
           (or (eq (point) (point-min)) (insert "\n"))
-	  (unless restclient-response-body-only
+          (unless restclient-response-body-only
             (let ((hstart (point)))
               (setq restclient--header-start-position hstart)
               (insert method " " url "\n")
@@ -454,7 +471,7 @@ METHOD, URL and STATUS are displayed along with the response headers."
               (insert headers)
               (insert (format "Request duration: %fs\n" (float-time (time-subtract restclient-request-time-end restclient-request-time-start))))
               (unless (member guessed-mode '(image-mode text-mode))
-		(comment-region hstart (point))))))))))
+                (comment-region hstart (point))))))))))
 
 (defun restclient-prettify-json-unicode ()
   "Convert hex representations of unicode to characters."
@@ -641,9 +658,9 @@ Environments contain sets of variable definitions.  A file can contain multiple
 environment definitions."
   (let* ((json-key-type 'string)
          (envs (json-read-file filename)))
-      (when (assoc "rest-client.environmentVariables" envs)
-        (setq envs (cdr (assoc "rest-client.environmentVariables" envs))))
-      envs))
+    (when (assoc "rest-client.environmentVariables" envs)
+      (setq envs (cdr (assoc "rest-client.environmentVariables" envs))))
+    envs))
 
 (defun restclient-reload-current-env ()
   "Refresh variable definitions from current environment definition."
@@ -663,15 +680,15 @@ environment definitions."
   (let ((vars nil)
         (bound (point)))
     (save-match-data
-     (save-excursion
-       (goto-char (point-min))
-       (while (search-forward-regexp restclient-var-regexp bound t)
-         (let ((name (or (match-string-no-properties 1)
-                         (match-string-no-properties 2)))
-               (should-eval (> (length (match-string 3)) 0))
-               (value (or (restclient-chop (match-string-no-properties 5)) (match-string-no-properties 4))))
-           (setq vars (cons (cons name (if should-eval (restclient-eval-var value) value)) vars))))
-       (append restclient-var-overrides vars restclient-var-defaults)))))
+      (save-excursion
+        (goto-char (point-min))
+        (while (search-forward-regexp restclient-var-regexp bound t)
+          (let ((name (or (match-string-no-properties 1)
+                          (match-string-no-properties 2)))
+                (should-eval (> (length (match-string 3)) 0))
+                (value (or (restclient-chop (match-string-no-properties 5)) (match-string-no-properties 4))))
+            (setq vars (cons (cons name (if should-eval (restclient-eval-var value) value)) vars))))
+        (append restclient-var-overrides vars restclient-var-defaults)))))
 
 (defun restclient-eval-var (string)
   "Evaluate the Lisp code contained in STRING.
@@ -787,21 +804,21 @@ VAR-NAME: a variable with or without decorations."
   "Look up the value of VAR-NAME in the current context.
 Context is defined by environment, dynamically set variables, and variables
 defined in BUFFER-NAME prior to BUFFER-POS."
-  ;(message (format "getting var %s from %s at %s" var-name buffer-name buffer-pos))
+                                        ;(message (format "getting var %s from %s at %s" var-name buffer-name buffer-pos))
   (let* ((var-name (restclient-sanitize-var-name var-name))
          (vars-at-point  (save-excursion
-			   (switch-to-buffer buffer-name)
-			   (goto-char buffer-pos)
-			   ;; if we're called from a restclient buffer we need to lookup vars before the current hook or evar
-			   ;; outside a restclient buffer only globals are available so moving the point wont matter
-			   (re-search-backward "^:\\|->" (point-min) t)
-			   (restclient-find-vars-before-point))))
+			                     (switch-to-buffer buffer-name)
+			                     (goto-char buffer-pos)
+			                     ;; if we're called from a restclient buffer we need to lookup vars before the current hook or evar
+			                     ;; outside a restclient buffer only globals are available so moving the point wont matter
+			                     (re-search-backward "^:\\|->" (point-min) t)
+			                     (restclient-find-vars-before-point))))
     (restclient-replace-all-in-string vars-at-point (cdr (assoc var-name vars-at-point)))))
 
 (defmacro restclient-get-var (var-name)
   "Get the value of VAR-NAME in the current buffer."
   (let ((buf-name (buffer-name (current-buffer)))
-	(buf-point (point)))
+	      (buf-point (point)))
     `(restclient-get-var-at-point ,var-name ,buf-name ,buf-point)))
 
 (defun restclient-single-request-function ()
@@ -809,7 +826,7 @@ defined in BUFFER-NAME prior to BUFFER-POS."
   (dolist (f restclient-curr-request-functions)
     (save-excursion
       (ignore-errors
-       (funcall f))))
+        (funcall f))))
   (setq restclient-curr-request-functions nil)
   (remove-hook 'restclient-response-loaded-hook 'restclient-single-request-function))
 
@@ -860,11 +877,11 @@ point as arguments, with ARGS included as the final argument."
           (setq q-param-separator "&")
           (forward-line))
         (while (cond
-		((looking-at restclient-response-hook-regexp)
-		 (when-let* ((hook-function (restclient-parse-hook (match-string-no-properties 2)
-				 				   (match-end 2)
-					 			   (match-string-no-properties 3))))
-		   (push hook-function restclient-curr-request-functions)))
+		            ((looking-at restclient-response-hook-regexp)
+		             (when-let* ((hook-function (restclient-parse-hook (match-string-no-properties 2)
+				 				                                                   (match-end 2)
+					 			                                                   (match-string-no-properties 3))))
+		               (push hook-function restclient-curr-request-functions)))
                 ((and (looking-at restclient-header-regexp) (not (looking-at restclient-empty-line-regexp)))
                  (setq headers (cons (restclient-replace-all-in-header vars (restclient-make-header)) headers)))
                 ((looking-at restclient-use-var-regexp)
@@ -872,8 +889,8 @@ point as arguments, with ARGS included as the final argument."
           (forward-line))
         (when (looking-at restclient-empty-line-regexp)
           (forward-line))
-	(when restclient-curr-request-functions
-	  (add-hook 'restclient-response-loaded-hook 'restclient-single-request-function))
+	      (when restclient-curr-request-functions
+	        (add-hook 'restclient-response-loaded-hook 'restclient-single-request-function))
         (let* ((cmax (restclient-current-max))
                (entity (restclient-parse-body (buffer-substring (min (point) cmax) cmax) vars)))
           (apply func method url headers entity args))))))
@@ -1016,61 +1033,61 @@ Optional argument SUPPRESS-RESPONSE-BUFFER do not display response buffer if t."
   (interactive)
   (let ((vars-at-point (restclient-find-vars-before-point)))
     (cl-labels ((non-overidden-vars-at-point ()
-		  (seq-filter (lambda (v)
-				(null (assoc (car v) restclient-var-overrides)))
-			      vars-at-point))
-		(sanitize-value-cell (var-value)
-		  (replace-regexp-in-string
-                   "\n" "|\n| |"
-                   (replace-regexp-in-string
-                    "\|" "\\\\vert{}"
-                    (replace-regexp-in-string
-                     "_" "\\\\under{}"
-		     (restclient-replace-all-in-string vars-at-point var-value)))))
+		                                         (seq-filter (lambda (v)
+				                                                   (null (assoc (car v) restclient-var-overrides)))
+			                                                   vars-at-point))
+		            (sanitize-value-cell (var-value)
+		                                 (replace-regexp-in-string
+                                      "\n" "|\n| |"
+                                      (replace-regexp-in-string
+                                       "\|" "\\\\vert{}"
+                                       (replace-regexp-in-string
+                                        "_" "\\\\under{}"
+		                                    (restclient-replace-all-in-string vars-at-point var-value)))))
                 (sanitize-name-cell (var-name)
-                  (replace-regexp-in-string "_" "\\\\under{}" var-name))
-		(var-row (var-name var-value)
-		  (insert "|" (sanitize-name-cell var-name) "|" (sanitize-value-cell var-value) "|\n"))
-		(var-table (table-name)
-		  (insert (format "* %s \n|--|\n|Name|Value|\n|---|\n" table-name)))
-		(var-table-footer ()
-		  (insert "|--|\n\n")))
+                                    (replace-regexp-in-string "_" "\\\\under{}" var-name))
+		            (var-row (var-name var-value)
+		                     (insert "|" (sanitize-name-cell var-name) "|" (sanitize-value-cell var-value) "|\n"))
+		            (var-table (table-name)
+		                       (insert (format "* %s \n|--|\n|Name|Value|\n|---|\n" table-name)))
+		            (var-table-footer ()
+		                              (insert "|--|\n\n")))
 
       (with-current-buffer (get-buffer-create restclient-info-buffer-name)
         (view-mode-exit t)
-	;; insert our info
-	(erase-buffer)
+	      ;; insert our info
+	      (erase-buffer)
 
-	(insert "\Restclient Info\ \n\n")
+	      (insert "\Restclient Info\ \n\n")
 
-	(var-table "Dynamic Variables")
-	(dolist (dv restclient-var-overrides)
-	  (var-row (car dv) (cdr dv)))
-	(var-table-footer)
+	      (var-table "Dynamic Variables")
+	      (dolist (dv restclient-var-overrides)
+	        (var-row (car dv) (cdr dv)))
+	      (var-table-footer)
 
-	(var-table "Vars at current position")
-	(dolist (dv (non-overidden-vars-at-point))
-	  (var-row (car dv) (cdr dv)))
-	(var-table-footer)
+	      (var-table "Vars at current position")
+	      (dolist (dv (non-overidden-vars-at-point))
+	        (var-row (car dv) (cdr dv)))
+	      (var-table-footer)
 
         (insert "* Active environment\n|--|\n|File|Environment name|\n|--|\n")
         (when (or restclient-current-env-file restclient-current-env-name)
           (insert "|" (or restclient-current-env-file "") "|" (or restclient-current-env-name "") "|\n"))
         (var-table-footer)
 
-	;; registered callbacks
-	(var-table "Registered request hook types")
-	(dolist (handler-name (delete-dups (mapcar 'car restclient-result-handlers)))
-	  (var-row handler-name (cddr (assoc handler-name restclient-result-handlers))))
-    	(var-table-footer)
+	      ;; registered callbacks
+	      (var-table "Registered request hook types")
+	      (dolist (handler-name (delete-dups (mapcar 'car restclient-result-handlers)))
+	        (var-row handler-name (cddr (assoc handler-name restclient-result-handlers))))
+    	  (var-table-footer)
 
-	(insert "\n\n'q' to exit\n")
-	(org-mode)
-	(org-toggle-pretty-entities)
-	(org-table-iterate-buffer-tables)
-	(outline-show-all)
-	(view-mode-enter)
-	(goto-char (point-min))))
+	      (insert "\n\n'q' to exit\n")
+	      (org-mode)
+	      (org-toggle-pretty-entities)
+	      (org-table-iterate-buffer-tables)
+	      (outline-show-all)
+	      (view-mode-enter)
+	      (goto-char (point-min))))
     (switch-to-buffer-other-window restclient-info-buffer-name)))
 
 (defun restclient-narrow-to-current ()
@@ -1116,9 +1133,9 @@ Hide/show only happens if point is on the first line of a request."
         (list restclient-use-var-regexp '(1 'restclient-variable-usage-face))
         (list restclient-file-regexp '(0 'restclient-file-upload-face))
         (list restclient-header-regexp '(1 'restclient-header-name-face t) '(2 'restclient-header-value-face t))
-	(list restclient-response-hook-regexp '(1 ' restclient-request-hook-face t)
-	      '(2 'restclient-request-hook-name-face t)
-	      '(3 'restclient-request-hook-args-face t))))
+	      (list restclient-response-hook-regexp '(1 ' restclient-request-hook-face t)
+	            '(2 'restclient-request-hook-name-face t)
+	            '(3 'restclient-request-hook-args-face t))))
 
 (defconst restclient-mode-syntax-table
   (let ((table (make-syntax-table)))
@@ -1159,11 +1176,11 @@ Added to the default `view-mode-map' when displaying responses in view mode.")
 
 (define-minor-mode restclient-outline-mode
   "Minor mode to allow show/hide of request bodies by TAB."
-      :init-value nil
-      :lighter nil
-      :keymap '(("\t" . restclient-toggle-body-visibility-or-indent)
-                ("\C-c\C-a" . restclient-toggle-body-visibility-or-indent))
-      :group 'restclient)
+  :init-value nil
+  :lighter nil
+  :keymap '(("\t" . restclient-toggle-body-visibility-or-indent)
+            ("\C-c\C-a" . restclient-toggle-body-visibility-or-indent))
+  :group 'restclient)
 
 ;;;###autoload
 (define-derived-mode restclient-mode fundamental-mode "REST Client"
