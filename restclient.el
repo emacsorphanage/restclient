@@ -149,9 +149,14 @@ will be temporarily set to that number."
           (integer :tag "Follow this many redirects")))
 
 (defcustom restclient-results-in-view-mode t
-  "Determines if the response buffer should be put in view-mode or left
-editable."
+  "Determines if the response buffer should be put in `view-mode' or left editable."
   :group 'restclient
+  :type 'boolean)
+
+(defcustom restclient-body-lines-end-in-crlf nil
+  "If non-nil, ensure lines in the request body ends in CRLF.
+Content read from files is not touched."
+  :group 'restcleint
   :type 'boolean)
 
 (defgroup restclient-faces nil
@@ -304,7 +309,7 @@ Stored as an alist of name -> (hook-creation-func . description)")
   "^\\(:[^: ]+\\)[ \t]*:?=[ \t]*\\(<<\\)[ \t]*$")
 
 (defconst restclient-file-regexp
-  "^<[ \t]*\\([^<>\n\r]+\\)[ \t]*$")
+  "^<[ \t]*\\([^<>\n\r]+\\)[ \t\r]*$")
 
 (defconst restclient-content-type-regexp
   "^Content-[Tt]ype: \\(\\w+\\)/\\(?:[^\\+\r\n]*\\+\\)*\\([^;\r\n]+\\)")
@@ -773,12 +778,24 @@ will be replaced with the contents of `/file/path'."
      (restclient-read-file (match-string 1 match)))
    entity t t))
 
+(defun restclient-maybe-adjust-eol-convention (entity)
+  "Maybe force the CRLF end-of-line convention in body lines.
+If `restclient-body-lines-end-in-crlf' is non-nil, each
+line in ENTITY is changed to end in CRLF if it does not already.
+May help if the body contains multipart headers and the server
+is strict in its parsing."
+  (if restclient-body-lines-end-in-crlf
+      (replace-regexp-in-string "\\([^\r]\\)$" "\\1\r" entity)
+    entity))
+
 (defun restclient-parse-body (entity vars)
   "Prepare a request body for sending.
 Replace variables with their values, and include file contents.
 ENTITY is the body of the request (a string), VARS is an alist of currently
 defined variables."
-  (restclient-replace-path-with-contents (restclient-replace-all-in-string vars entity)))
+  (restclient-replace-path-with-contents
+   (restclient-maybe-adjust-eol-convention
+    (restclient-replace-all-in-string vars entity))))
 
 (defun restclient-parse-hook (cb-type args-offset args)
   "Parse a hook definition.
