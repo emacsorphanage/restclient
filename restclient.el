@@ -1102,7 +1102,7 @@ Optional argument SUPPRESS-RESPONSE-BUFFER do not display response buffer if t."
 		(var-row (var-name var-value)
 		  (insert "|" (sanitize-name-cell var-name) "|" (sanitize-value-cell var-value) "|\n"))
 		(var-table (table-name)
-		  (insert (format "* %s \n|--|\n|Name|Value|\n|---|\n" table-name)))
+		  (insert (format "* %s\n|--|\n|Name|Value|\n|---|\n" table-name)))
 		(var-table-footer ()
 		  (insert "|--|\n\n")))
 
