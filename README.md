@@ -111,6 +111,8 @@ response.
 
 # In-buffer variables
 
+For safety, this functionality is disabled by default. Set `restclient-enable-eval` to non-nil to use it.
+
 You declare a variable like this:
 
     :myvar = the value
@@ -390,6 +392,12 @@ __Default: t__
 
 Determines if the response buffer should be put in view-mode or left
 editable.
+
+### restclient-enable-eval
+
+__Default: nil__
+
+Allows evaluation of arbitrary forms in file when non-nil. Never set this when working with untrusted files.
 
 # Known issues
 

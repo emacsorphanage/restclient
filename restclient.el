@@ -154,6 +154,12 @@ editable."
   :group 'restclient
   :type 'boolean)
 
+(defcustom restclient-enable-eval nil
+  "Whether eval features are enabled.
+Do not set to non-nil when working with untrusted documents."
+  :group 'restclient
+  :type 'boolean)
+
 (defgroup restclient-faces nil
   "Faces used in Restclient Mode."
   :group 'restclient
@@ -710,7 +716,15 @@ environment definitions."
                          (match-string-no-properties 2)))
                (should-eval (> (length (match-string 3)) 0))
                (value (or (restclient-chop (match-string-no-properties 5)) (match-string-no-properties 4))))
-           (setq vars (cons (cons name (if should-eval (restclient-eval-var value) value)) vars))))
+	   (setq value (cond
+			((not should-eval)
+			 value)
+			((not restclient-enable-eval)
+			 (warn "Evaluation disabled in current buffer: `restclient-enable-eval' is nil")
+			 value)
+			(t
+			 (restclient-eval-var value))))
+           (push (cons name value) vars)))
        (append restclient-var-overrides vars restclient-var-defaults)))))
 
 (defun restclient-eval-var (string)
@@ -956,9 +970,12 @@ Read one S-expression starting from OFFSET.
 Return a function of 0 arguments that evaluates that S-expression.
 ARGS is ignored."
   (goto-char offset)
-  (let ((form (macroexpand-all (read (current-buffer)))))
+  (if restclient-enable-eval
+      (let ((form (macroexpand-all (read (current-buffer)))))
+	(lambda ()
+	  (eval form)))
     (lambda ()
-      (eval form))))
+      (warn "Evaluation disabled in current buffer: `restclient-enable-eval' is nil"))))
 
 (restclient-register-result-func
  "run-hook" #'restclient-elisp-result-function
