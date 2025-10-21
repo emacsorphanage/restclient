@@ -399,6 +399,16 @@ __Default: nil__
 
 Allows evaluation of arbitrary forms in file when non-nil. Never set this when working with untrusted files.
 
+### restclient-strip-http-version
+
+__Default: nil__
+
+Whether or not to strip "HTTP/x.y" from request lines.  `url.el` will
+automatically append a HTTP version clause, but many .http files
+specify these in the request lines.  If this variable is non-nil,
+restclient will strip the clause from the end of the request before
+passing it to `url.el`.
+
 # Known issues
 
 - Comment lines `#` act as end of entity. Yes, that means you can't post shell script or anything with hashes as PUT/POST entity. I'm fine with this right now,

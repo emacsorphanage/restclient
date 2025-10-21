@@ -160,6 +160,15 @@ Do not set to non-nil when working with untrusted documents."
   :group 'restclient
   :type 'boolean)
 
+(defcustom restclient-strip-http-version nil
+  "Whether or not to strip \"HTTP/x.y\" from request lines.
+`url.el' will automatically append a HTTP version clause,
+but many .http files specify these in the request lines.
+If this variable is non-nil, restclient will strip the clause
+from the end of the request before passing it to `url.el'."
+  :group 'restclient
+  :type 'boolean)
+
 (defgroup restclient-faces nil
   "Faces used in Restclient Mode."
   :group 'restclient
@@ -287,6 +296,8 @@ Stored as an alist of name -> (hook-creation-func . description)")
 
 (defconst restclient-url-continuation-key-value-regexp
   "\\([^= ]+\\)\\s-*=\\s-*\\(.*\\)$")
+
+(defconst restclient-url-version-regexp "[[:blank:]]+HTTP/[0-9]+\\.[0-9]+$")
 
 (defconst restclient-method-body-prohibited-regexp
   "^GET\\|HEAD$")
@@ -918,6 +929,8 @@ point as arguments, with ARGS included as the final argument."
                                    restclient-query-use-continuation-lines))))))
           (setq q-param-separator "&")
           (forward-line))
+        (when restclient-strip-http-version
+          (setq url (replace-regexp-in-string restclient-url-version-regexp "" url)))
         (while (cond
 		((looking-at restclient-response-hook-regexp)
 		 (when-let* ((hook-function (restclient-parse-hook (match-string-no-properties 2)
