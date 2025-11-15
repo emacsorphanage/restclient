@@ -33,6 +33,7 @@ and supports a few additional keypresses:
 - `C-c C-i`: show information on restclient variables at point
 - `C-c C-e`: prompt for environment from which to load variable definitions
 - `C-c M-e`: reload the currently active environment
+- `C-c '`: Opens the request body for editing in an indirect buffer. (if the package [edit-indirect](https://github.com/Fanael/edit-indirect) is installed)
 
 Hide/show request body is implemented as `restclient-outline-mode` minor mode, which is activated by default via hook for major mode. Remove this hook using `(remove-hook 'restclient-mode-hook 'restclient-outline-mode)` if you don't wish to have this behaviour, or it clashes with any other binding for `TAB` like autocomplete.
 

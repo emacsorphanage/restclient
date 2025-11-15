@@ -976,6 +976,24 @@ point as arguments, with ARGS included as the final argument."
                            body-arg)))
       (message "curl command copied to clipboard."))))
 
+(declare-function edit-indirect-region "ext:edit-indirect")
+
+(defun restclient-indirect-edit ()
+  "Use `edit-indirect-region' to edit the request body in a separate buffer."
+  (interactive)
+  (if (not (fboundp 'edit-indirect-region))
+      (message "edit-indirect is not installed")
+    (save-excursion
+      (goto-char (restclient-current-min))
+      (when (re-search-forward restclient-method-url-regexp (point-max) t)
+        (forward-line)
+        (while (cond
+                ((and (looking-at restclient-header-regexp) (not (looking-at restclient-empty-line-regexp))))
+                ((looking-at restclient-use-var-regexp)))
+          (forward-line))
+        (when (looking-at restclient-empty-line-regexp)
+          (forward-line))
+        (edit-indirect-region (min (point) (restclient-current-max)) (restclient-current-max) t)))))
 
 (defun restclient-elisp-result-function (_args offset)
   "This is a hook constructor function.
@@ -1240,6 +1258,7 @@ Hide/show only happens if point is on the first line of a request."
     (define-key map (kbd "C-c C-i") 'restclient-show-info)
     (define-key map (kbd "C-c C-e") 'restclient-set-env)
     (define-key map (kbd "C-c M-e") 'restclient-reload-current-env)
+    (define-key map (kbd "C-c '") 'restclient-indirect-edit)
     map)
   "Keymap for `restclient-mode'.")
 
