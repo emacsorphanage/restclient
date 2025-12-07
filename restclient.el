@@ -978,6 +978,19 @@ point as arguments, with ARGS included as the final argument."
 
 (declare-function edit-indirect-region "ext:edit-indirect")
 
+(defun restclient-edit-indirect-guess-mode (_parent-buffer _beg _end)
+  "Alternative to `edit-indirect-default-guess-mode'.
+Customize `edit-indirect-guess-mode-function' to name this function
+to get JSON request bodies editable in your preferred json mode."
+  ;; FIXME: Ideally, this should check the content-type of the
+  ;; current request.  Could use restclient-http-parse-current-and-do,
+  ;; but would need to stop request hook setup.
+  (save-excursion
+    (goto-char (point-min))
+    (if (looking-at "[[{]" t)
+       (funcall (restclient--preferred-mode "application/json"))
+     (normal-mode))))
+
 (defun restclient-indirect-edit ()
   "Use `edit-indirect-region' to edit the request body in a separate buffer."
   (interactive)

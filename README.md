@@ -426,6 +426,12 @@ but may use more unique separator in future.
 - [ob-restclient](https://github.com/alf/ob-restclient.el): An extension to restclient.el for emacs that provides org-babel support.
 - [restclient.vim](https://github.com/bounceme/restclient.vim): Brings the restclient to vim! Responses display in vim's internal pager.
 - [json-navigator](https://github.com/DamienCassou/json-navigator): Another way of viewing JSON data.
+- [edit-indirect](https://github.com/Fanael/edit-indirect): If this
+  package is installed, `C-c '` will open an indirect buffer with the
+  request body.  We recommend customizing
+  `edit-indirect-guess-mode-function` to point to the function
+  `restclient-edit-indirect-guess-mode` in order to have JSON request
+  bodies open in a better mode than `fundamental-mode`.
 
 # License
 
