@@ -32,7 +32,7 @@
       (require 'cl)
     (require 'cl-lib)))
 
-(eval-and-compile
+(eval-when-compile
   (unless (functionp 'hash-table-contains-p)
     (let ((missing (make-symbol "missing")))
       (defsubst hash-table-contains-p (key table)
