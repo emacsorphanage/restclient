@@ -289,7 +289,7 @@ Stored as an alist of name -> (hook-creation-func . description)")
 (defconst restclient-empty-line-regexp "^\\s-*$")
 
 (defconst restclient-method-url-regexp
-  "^[[:blank:]]*\\(GET\\|POST\\|DELETE\\|PUT\\|HEAD\\|OPTIONS\\|PATCH\\|PROPFIND\\) \\(.*\\)$")
+  "^[[:blank:]]*\\(GET\\|POST\\|DELETE\\|PUT\\|HEAD\\|OPTIONS\\|PATCH\\|PROPFIND\\|QUERY\\) \\(.*\\)$")
 
 (defconst restclient-url-continuation-line-regexp
   "^[[:blank:]]+\\(.*\\)$")
